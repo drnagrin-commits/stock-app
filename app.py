@@ -10,9 +10,9 @@ tickers = [t.strip() for t in tickers_input.split(",")]
 
 data = []
 for t in tickers:
-res = analyze(t)
-if res:
-data.append(res)
+    res = analyze(t)
+    if res:
+        data.append(res)
 
 df = pd.DataFrame(data)
 
