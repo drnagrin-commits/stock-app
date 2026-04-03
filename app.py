@@ -17,4 +17,4 @@ for t in tickers:
 df = pd.DataFrame(data)
 
 if not df.empty:
-st.dataframe(df)
+    st.dataframe(df)
