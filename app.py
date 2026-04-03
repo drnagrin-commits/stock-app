@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from core import analyze
 
-st.title("Rule #1 AI App")
+st.title("rulenum1")
 
 tickers_input = st.text_input("Enter Tickers", "NVDA,AMD,AMAT")
 
