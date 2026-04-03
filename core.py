@@ -5,38 +5,38 @@ DISCOUNT_RATE = 0.15
 MOS_MARGIN = 0.5
 
 def sticker(eps, growth, pe):
-future_eps = eps * ((1+growth)**10)
-future_price = future_eps * pe
-return future_price / ((1+DISCOUNT_RATE)**10)
+    future_eps = eps * ((1+growth)**10)
+    future_price = future_eps * pe
+    return future_price / ((1+DISCOUNT_RATE)**10)
 
 def analyze(ticker):
-s = yf.Ticker(ticker)
+    s = yf.Ticker(ticker)
 
-try:
-price = s.info["currentPrice"]
-eps = s.info["trailingEps"]
-pe = s.info.get("trailingPE", 20)
+    try:
+        price = s.info["currentPrice"]
+        eps = s.info["trailingEps"]
+        pe = s.info.get("trailingPE", 20)
 
-earnings = s.earnings
-eps_history = earnings["Earnings"].values if earnings is not None else [eps]
+        earnings = s.earnings
+        eps_history = earnings["Earnings"].values if earnings is not None else [eps]
 
-growth = predict_growth(eps_history)
+        growth = predict_growth(eps_history)
 
-hist = s.history(period="1y")
-predicted_price = predict_price(hist["Close"].values)
+        hist = s.history(period="1y")
+        predicted_price = predict_price(hist["Close"].values)
 
-stick = sticker(eps, growth, pe)
-mos = stick * 0.5
+        stick = sticker(eps, growth, pe)
+        mos = stick * 0.5
 
-ai_signal = ai_decision(price, stick, mos, predicted_price)
+        ai_signal = ai_decision(price, stick, mos, predicted_price)
 
-return {
-"Ticker": ticker,
-"Price": round(price,2),
-"Sticker": round(stick,2),
-"MOS": round(mos,2),
-"AI": ai_signal
-}
+        return {
+            "Ticker": ticker,
+            "Price": round(price,2),
+            "Sticker": round(stick,2),
+            "MOS": round(mos,2),
+            "AI": ai_signal
+        }
 
-except:
-return None
+    except:
+        return None
