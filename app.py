@@ -1,99 +1,153 @@
-import yfinance as yf
+import streamlit as st
 import pandas as pd
+import yfinance as yf
 import numpy as np
 
-# =========================
-# Rule #1 Parameters
-# =========================
 DISCOUNT_RATE = 0.15
-MOS_FACTOR = 0.5
-YEARS = 10
+MOS_MARGIN = 0.5
+
+DEFAULT_TICKERS = [
+    "AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA",
+    "AVGO","COST","PEP","ADBE","CSCO","NFLX","AMD","INTC",
+    "TXN","QCOM","AMGN","INTU","ISRG","AMAT","BKNG",
+    "ADI","LRCX","MU","PANW","SNPS","CDNS","KLAC"
+]
 
 # =========================
-# Helper Functions
+# EPS Growth
 # =========================
-def estimate_growth(stock):
-    """
-    Try to estimate growth using revenue history
-    fallback to default if not available
-    """
+def get_growth(stock):
     try:
-        rev = stock.financials.loc["Total Revenue"]
-        rev = rev[::-1]  # oldest → newest
-        if len(rev) >= 4:
-            growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
-            return min(max(growth, 0.05), 0.25)  # clamp 5%-25%
+        earnings = stock.earnings
+
+        if earnings is None or len(earnings) < 3:
+            return None
+
+        eps = earnings["Earnings"].values
+        growth_rates = []
+
+        for i in range(1, len(eps)):
+            if eps[i-1] > 0:
+                growth_rates.append((eps[i]/eps[i-1]) - 1)
+
+        return np.mean(growth_rates) if growth_rates else None
+
     except:
-        pass
-    return 0.10  # fallback
+        return None
 
 
-def get_pe(stock):
+# =========================
+# Sticker + Future PE
+# =========================
+def calculate_sticker(eps, growth):
+    future_eps = eps * ((1 + growth) ** 10)
+
+    future_pe = min(growth * 100 * 2, 25)
+
+    future_price = future_eps * future_pe
+    sticker = future_price / ((1 + DISCOUNT_RATE) ** 10)
+
+    return sticker, future_pe
+
+
+# =========================
+# Market Sentiment
+# =========================
+def get_sentiment(future_pe, forward_pe):
+    if not forward_pe:
+        return "No Data"
+
+    ratio = forward_pe / future_pe
+
+    if ratio > 1.2:
+        return "🔴 Overvalued"
+    elif ratio < 0.8:
+        return "🟢 Undervalued"
+    else:
+        return "🟡 Fair"
+
+
+# =========================
+# Analyze Stock
+# =========================
+def analyze(ticker):
     try:
-        return stock.info.get("forwardPE") or stock.info.get("trailingPE") or 15
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        price = info.get("currentPrice")
+        eps = info.get("trailingEps")
+        roic = info.get("returnOnCapital")
+        forward_pe = info.get("forwardPE")
+
+        growth = get_growth(stock)
+
+        if not price or not eps or not growth or roic is None:
+            return None
+
+        sticker, future_pe = calculate_sticker(eps, growth)
+        mos = sticker * MOS_MARGIN
+        upside = (sticker - price) / price * 100
+
+        score = (
+            growth * 100 * 0.4 +
+            roic * 100 * 0.3 +
+            upside * 0.3
+        )
+
+        # Decision Rule #1
+        if price < mos:
+            decision = "🔥 STRONG BUY"
+        elif price < sticker:
+            decision = "🟢 BUY"
+        else:
+            decision = "🟡 WAIT"
+
+        sentiment = get_sentiment(future_pe, forward_pe)
+
+        return {
+            "Ticker": ticker,
+            "Price": round(price,2),
+            "EPS": round(eps,2),
+            "%Growth": round(growth*100,1),
+            "ROIC%": round(roic*100,1),
+            "Future PE": round(future_pe,1),
+            "Forward PE": round(forward_pe,1) if forward_pe else None,
+            "Market Sentiment": sentiment,
+            "Sticker": round(sticker,2),
+            "MOS": round(mos,2),
+            "Upside%": round(upside,1),
+            "Score": round(score,1),
+            "Decision": decision
+        }
+
     except:
-        return 15
-
-
-def get_eps(stock):
-    try:
-        return stock.info.get("trailingEps") or 1
-    except:
-        return 1
-
-
-def rule1_valuation(eps, growth, pe):
-    future_eps = eps * ((1 + growth) ** YEARS)
-    future_price = future_eps * pe
-    sticker_price = future_price / ((1 + DISCOUNT_RATE) ** YEARS)
-    mos_price = sticker_price * MOS_FACTOR
-    return sticker_price, mos_price
+        return None
 
 
 # =========================
-# Main Function
+# UI
 # =========================
-def analyze_stocks(tickers):
-    results = []
+st.title("📊 Rule #1 Screener PRO")
 
-    for ticker in tickers:
-        try:
-            stock = yf.Ticker(ticker)
+tickers_input = st.text_input(
+    "Enter Tickers (comma separated)",
+    ",".join(DEFAULT_TICKERS)
+)
 
-            eps = get_eps(stock)
-            growth = estimate_growth(stock)
-            pe = get_pe(stock)
+tickers = [t.strip().upper() for t in tickers_input.split(",")]
 
-            sticker, mos = rule1_valuation(eps, growth, pe)
+results = []
 
-            price = stock.history(period="1d")["Close"].iloc[-1]
+for t in tickers:
+    res = analyze(t)
+    if res:
+        results.append(res)
 
-            results.append({
-                "Ticker": ticker,
-                "EPS": round(eps, 2),
-                "Growth %": round(growth * 100, 1),
-                "PE": round(pe, 1),
-                "Sticker Price": round(sticker, 1),
-                "MOS Price": round(mos, 1),
-                "Current Price": round(price, 1),
-                "Upside %": round((sticker/price - 1) * 100, 1)
-            })
+df = pd.DataFrame(results)
 
-        except Exception as e:
-            print(f"Error with {ticker}: {e}")
-
-    df = pd.DataFrame(results)
-    return df.sort_values(by="Upside %", ascending=False)
-
-
-# =========================
-# Run Example
-# =========================
-if __name__ == "__main__":
-    tickers = [
-        "INTC", "QCOM", "NVDA", "AVGO", "MU",
-        "AMD", "AMAT", "MRVL", "KLAC", "TER", "MPWR"
-    ]
-
-    df = analyze_stocks(tickers)
-    print(df)
+if not df.empty:
+    df = df.sort_values(by="Score", ascending=False)
+    st.dataframe(df)
+else:
+    st.write("No valid data (missing EPS / Growth / ROIC)")
