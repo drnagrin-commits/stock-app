@@ -1,14 +1,9 @@
-import pandas as pd
-
 def get_nasdaq100():
-    url = "https://en.wikipedia.org/wiki/Nasdaq-100"
-    tables = pd.read_html(url)
-    
-    df = tables[4]  # הטבלה של החברות
-    
-    tickers = df["Ticker"].tolist()
-    
-    # תיקון תווים
-    tickers = [t.replace(".", "-") for t in tickers]
-    
-    return tickers
+    # רשימה יציבה (ניתן לעדכן מדי פעם)
+    return [
+        "AAPL","MSFT","NVDA","AMZN","META","GOOGL","GOOG","TSLA",
+        "AVGO","COST","PEP","ADBE","CSCO","NFLX","AMD","INTC",
+        "CMCSA","TXN","QCOM","AMGN","HON","INTU","ISRG","AMAT",
+        "BKNG","ADI","MDLZ","LRCX","MU","GILD","PANW","SNPS",
+        "CDNS","KLAC","VRTX","REGN","ADP","MAR","MNST","FTNT"
+    ]
