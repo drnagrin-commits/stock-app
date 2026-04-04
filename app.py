@@ -154,11 +154,10 @@ if st.button("🚀 הרץ"):
             # 🔥 SCORE
             score = calculate_score(cagr, peg, upside, price, buy)
 
-
             results.append({
                 "Symbol": stock,
                 "Price": price,
-                "Trailing_PE": round(trailing_pe, 2) if isinstance(trailing_pe, (int, float)) else None,
+                "Trailing_PE": round(info.get("trailingPE"), 2) if isinstance(info.get("trailingPE"), (int, float)) else None,
                 "Forward_PE": round(forward_pe, 2) if isinstance(forward_pe, (int, float)) else None,
                 "CAGR_%": round(cagr,1) if cagr else None,
                 "PEG": round(peg,2) if peg else None,
