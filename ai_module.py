@@ -3,7 +3,7 @@ from sklearn.linear_model import LinearRegression
 
 def predict_growth(eps_history):
     if len(eps_history) < 3:
-        return 0.1
+        return 0.5
 
     y = np.array(eps_history)
     X = np.arange(len(y)).reshape(-1,1)
