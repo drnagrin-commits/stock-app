@@ -104,6 +104,8 @@ def analyze(ticker):
         sticker, mos = rule1(eps, growth, pe)
 
         price = stock.fast_info.get("lastPrice", None)
+        if price is None or eps is None:
+    continue
 
         upside = (sticker / price - 1) * 100
 
