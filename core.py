@@ -1,5 +1,5 @@
 import yfinance as yf
-from ai_module import predict_growth, predict_price, ai_decision
+from ai_module import predict_price, ai_decision
 
 DISCOUNT_RATE = 0.15
 MOS_MARGIN = 0.5
