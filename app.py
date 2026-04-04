@@ -4,7 +4,7 @@ from core import analyze
 
 st.title("Rule #1 AI App")
 
-tickers_input = st.text_input("Enter Tickers", "NVDA,AMD,AMAT")
+tickers_input = st.text_input("Enter Tickers", "NVDA,AMD,AMAT,TSLA")
 
 tickers = [t.strip() for t in tickers_input.split(",")]
 
