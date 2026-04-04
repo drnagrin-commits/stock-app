@@ -1,113 +1,99 @@
-import streamlit as st
-import pandas as pd
 import yfinance as yf
+import pandas as pd
 import numpy as np
 
+# =========================
+# Rule #1 Parameters
+# =========================
 DISCOUNT_RATE = 0.15
-MOS_MARGIN = 0.5
+MOS_FACTOR = 0.5
+YEARS = 10
 
-# NASDAQ 100 (ברירת מחדל)
-DEFAULT_TICKERS = [
-    "AAPL","MSFT","NVDA","AMZN","META","GOOGL","GOOG","TSLA",
-    "AVGO","COST","PEP","ADBE","CSCO","NFLX","AMD","INTC",
-    "CMCSA","TXN","QCOM","AMGN","HON","INTU","ISRG","AMAT",
-    "BKNG","ADI","MDLZ","LRCX","MU","GILD","PANW","SNPS",
-    "CDNS","KLAC","VRTX","REGN","ADP","MAR","MNST","FTNT"
-]
-
-def get_growth(stock):
+# =========================
+# Helper Functions
+# =========================
+def estimate_growth(stock):
+    """
+    Try to estimate growth using revenue history
+    fallback to default if not available
+    """
     try:
-        earnings = stock.earnings
-        if earnings is None or len(earnings) < 3:
-            return 0.1
-
-        eps = earnings["Earnings"].values
-        growth_rates = []
-
-        for i in range(1, len(eps)):
-            if eps[i-1] > 0:
-                growth_rates.append((eps[i]/eps[i-1]) - 1)
-
-        return np.mean(growth_rates) if growth_rates else 0.1
+        rev = stock.financials.loc["Total Revenue"]
+        rev = rev[::-1]  # oldest → newest
+        if len(rev) >= 4:
+            growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
+            return min(max(growth, 0.05), 0.25)  # clamp 5%-25%
     except:
-        return 0.1
+        pass
+    return 0.10  # fallback
 
 
-def calculate_sticker(eps, growth, pe):
-    future_eps = eps * ((1 + growth) ** 10)
+def get_pe(stock):
+    try:
+        return stock.info.get("forwardPE") or stock.info.get("trailingPE") or 15
+    except:
+        return 15
+
+
+def get_eps(stock):
+    try:
+        return stock.info.get("trailingEps") or 1
+    except:
+        return 1
+
+
+def rule1_valuation(eps, growth, pe):
+    future_eps = eps * ((1 + growth) ** YEARS)
     future_price = future_eps * pe
-    sticker = future_price / ((1 + DISCOUNT_RATE) ** 10)
-    return sticker
+    sticker_price = future_price / ((1 + DISCOUNT_RATE) ** YEARS)
+    mos_price = sticker_price * MOS_FACTOR
+    return sticker_price, mos_price
 
 
-def analyze(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+# =========================
+# Main Function
+# =========================
+def analyze_stocks(tickers):
+    results = []
 
-        price = info.get("currentPrice")
-        eps = info.get("trailingEps")
-        pe = info.get("trailingPE", 20)
-        roic = info.get("returnOnCapital", None)
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
 
-        if not price or not eps:
-            return None
+            eps = get_eps(stock)
+            growth = estimate_growth(stock)
+            pe = get_pe(stock)
 
-        growth = get_growth(stock)
+            sticker, mos = rule1_valuation(eps, growth, pe)
 
-        sticker = calculate_sticker(eps, growth, pe)
-        mos = sticker * MOS_MARGIN
-        upside = (sticker - price) / price * 100
+            price = stock.history(period="1d")["Close"].iloc[-1]
 
-        # Score פשוט
-        score = (growth * 100) * 0.4 + (roic or 0) * 100 * 0.3 + upside * 0.3
+            results.append({
+                "Ticker": ticker,
+                "EPS": round(eps, 2),
+                "Growth %": round(growth * 100, 1),
+                "PE": round(pe, 1),
+                "Sticker Price": round(sticker, 1),
+                "MOS Price": round(mos, 1),
+                "Current Price": round(price, 1),
+                "Upside %": round((sticker/price - 1) * 100, 1)
+            })
 
-        # Decision לפי Rule #1 בלבד
-        if price < mos:
-            decision = "🔥 STRONG BUY"
-        elif price < sticker:
-            decision = "🟢 BUY"
-        else:
-            decision = "🟡 WAIT"
+        except Exception as e:
+            print(f"Error with {ticker}: {e}")
 
-        return {
-            "Ticker": ticker,
-            "Price": round(price,2),
-            "EPS": round(eps,2),
-            "%Growth": round(growth*100,1),
-            "ROIC%": round((roic or 0)*100,1),
-            "Sticker": round(sticker,2),
-            "MOS": round(mos,2),
-            "Upside%": round(upside,1),
-            "Score": round(score,1),
-            "Decision": decision
-        }
-
-    except:
-        return None
+    df = pd.DataFrame(results)
+    return df.sort_values(by="Upside %", ascending=False)
 
 
-# UI
-st.title("📊 Rule #1 Screener (Yahoo Data Only)")
+# =========================
+# Run Example
+# =========================
+if __name__ == "__main__":
+    tickers = [
+        "INTC", "QCOM", "NVDA", "AVGO", "MU",
+        "AMD", "AMAT", "MRVL", "KLAC", "TER", "MPWR"
+    ]
 
-tickers_input = st.text_input(
-    "Enter Tickers (comma separated)",
-    ",".join(DEFAULT_TICKERS)
-)
-
-tickers = [t.strip().upper() for t in tickers_input.split(",")]
-
-results = []
-
-for t in tickers:
-    res = analyze(t)
-    if res:
-        results.append(res)
-
-df = pd.DataFrame(results)
-
-if not df.empty:
-    df = df.sort_values(by="Score", ascending=False)
-    st.dataframe(df)
-else:
-    st.write("No data available")
+    df = analyze_stocks(tickers)
+    print(df)
