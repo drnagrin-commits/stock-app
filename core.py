@@ -20,7 +20,7 @@ def analyze(ticker):
         earnings = s.earnings
         eps_history = earnings["Earnings"].values if earnings is not None else [eps]
 
-        growth = predict_growth(eps_history)
+        growth = 200
 
         hist = s.history(period="1y")
         predicted_price = predict_price(hist["Close"].values)
