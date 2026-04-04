@@ -6,7 +6,7 @@ from data import get_nasdaq100
 st.title("📊 Rule #1 Screener PRO")
 
 # ברירת מחדל NASDAQ 100
-default_tickers = ["aapl"]
+default_tickers = get_nasdaq100()
 
 tickers_input = st.text_area(
     "Enter Tickers (comma separated)",
