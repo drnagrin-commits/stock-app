@@ -9,6 +9,19 @@ def sticker(eps, growth, pe):
     future_price = future_eps * pe
     return future_price / ((1+DISCOUNT_RATE)**10)
 
+
+def estimate_growth(stock):
+    try:
+        rev = stock.financials.loc["Total Revenue"]
+        rev = rev[::-1] # oldest → newest
+        if len(rev) >= 4:
+            growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
+            return min(max(growth, 0.05), 0.25) # clamp 5%-25%
+    except:
+        pass
+    return 0.10 # fallback
+
+
 def analyze(ticker):
     s = yf.Ticker(ticker)
 
@@ -19,8 +32,6 @@ def analyze(ticker):
 
         earnings = s.earnings
         eps_history = earnings["Earnings"].values if earnings is not None else [eps]
-
-        growth = predict_growth(eps_history)
 
         hist = s.history(period="1y")
         predicted_price = predict_price(hist["Close"].values)
@@ -40,3 +51,7 @@ def analyze(ticker):
 
     except:
         return None
+
+
+
+
