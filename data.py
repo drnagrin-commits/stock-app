@@ -1,5 +1,4 @@
 def get_nasdaq100():
-    # רשימה יציבה (ניתן לעדכן מדי פעם)
     return [
         "AAPL","MSFT","NVDA","AMZN","META","GOOGL","GOOG","TSLA",
         "AVGO","COST","PEP","ADBE","CSCO","NFLX","AMD","INTC",
