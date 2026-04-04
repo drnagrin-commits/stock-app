@@ -21,12 +21,12 @@ def estimate_growth(stock):
         pass
 
     # ניסיון 2: EPS growth
-    try:
-        eps_hist = stock.info.get("earningsQuarterlyGrowth")
-        if eps_hist:
-            return min(max(eps_hist, 0.05), 0.25)
-    except:
-        pass
+        try:
+            eps_hist = stock.info.get("earningsQuarterlyGrowth")
+            if eps_hist:
+                return min(max(eps_hist, 0.05), 0.25)
+        except:
+            pass
 
     # fallback
     return 0.10
