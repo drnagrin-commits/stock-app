@@ -3,7 +3,7 @@ from sklearn.linear_model import LinearRegression
 
 def predict_growth(eps_history):
     if len(eps_history) < 3:
-        return 0.5
+        return 30000
 
     y = np.array(eps_history)
     X = np.arange(len(y)).reshape(-1,1)
@@ -14,7 +14,7 @@ def predict_growth(eps_history):
     future = model.predict([[len(y)+3]])[0]
     growth = (future / y[-1]) ** (1/3) - 1
 
-    return max(min(growth, 0.25), 0.05)
+    return growth
 
 def predict_price(price_history):
     y = np.array(price_history)
