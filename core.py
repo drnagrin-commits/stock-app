@@ -9,20 +9,27 @@ YEARS = 10
 # =========================
 # Growth (Revenue based)
 # =========================
-def estimate_growth(stock):
-    try:
-        rev = stock.financials.loc["Total Revenue"]
-        rev = rev[::-1]
 
-        if len(rev) >= 4:
+def estimate_growth(stock):
+    # ניסיון 1: Revenue
+    try:
+        rev = stock.financials.loc["Total Revenue"][::-1]
+        if len(rev) >= 3:
             growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
             return min(max(growth, 0.05), 0.25)
     except:
         pass
 
-    return None
+    # ניסיון 2: EPS growth
+    try:
+        eps_hist = stock.info.get("earningsQuarterlyGrowth")
+        if eps_hist:
+            return min(max(eps_hist, 0.05), 0.25)
+    except:
+        pass
 
-
+    # fallback
+    return 0.10
 # =========================
 # Data Extractors
 # =========================
