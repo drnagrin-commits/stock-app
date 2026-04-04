@@ -1,41 +1,141 @@
 import yfinance as yf
-from ai_module import predict_growth, predict_price, ai_decision
+import numpy as np
 
 DISCOUNT_RATE = 0.15
-MOS_MARGIN = 0.5
+MOS_FACTOR = 0.5
+YEARS = 10
 
-def sticker(eps, growth, pe):
-    future_eps = eps * ((1+growth)**10)
-    future_price = future_eps * pe
-    return future_price / ((1+DISCOUNT_RATE)**10)
 
-def analyze(ticker):
-    s = yf.Ticker(ticker)
-
+# =========================
+# Growth (Revenue based)
+# =========================
+def estimate_growth(stock):
     try:
-        price = s.info["currentPrice"]
-        eps = s.info["trailingEps"]
-        pe = s.info.get("trailingPE", 20)
+        rev = stock.financials.loc["Total Revenue"]
+        rev = rev[::-1]
 
-        earnings = s.earnings
-        eps_history = earnings["Earnings"].values if earnings is not None else [eps]
+        if len(rev) >= 4:
+            growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
+            return min(max(growth, 0.05), 0.25)
+    except:
+        pass
 
-        growth = predict_growth(eps_history)
+    return None
 
-        hist = s.history(period="1y")
-        predicted_price = predict_price(hist["Close"].values)
 
-        stick = sticker(eps, growth, pe)
-        mos = stick * 0.5
+# =========================
+# Data Extractors
+# =========================
+def get_eps(stock):
+    return stock.info.get("trailingEps")
 
-        ai_signal = ai_decision(price, stick, mos, predicted_price)
+
+def get_roic(stock):
+    return stock.info.get("returnOnCapital")
+
+
+def get_pe(stock, growth):
+    # Rule #1 Future PE
+    return min(growth * 100 * 2, 25)
+
+
+def get_forward_pe(stock):
+    return stock.info.get("forwardPE")
+
+
+# =========================
+# Valuation
+# =========================
+def rule1(eps, growth, pe):
+    future_eps = eps * ((1 + growth) ** YEARS)
+    future_price = future_eps * pe
+    sticker = future_price / ((1 + DISCOUNT_RATE) ** YEARS)
+    mos = sticker * MOS_FACTOR
+    return sticker, mos
+
+
+# =========================
+# 4M Scoring
+# =========================
+def score_4m(growth, roic, upside):
+    moat = min(growth * 100, 25)
+    management = min(roic * 100 if roic else 0, 25)
+    margin_safety = min(max(upside, 0), 25)
+    meaning = 20  # placeholder קבוע
+
+    total = moat + management + margin_safety + meaning
+
+    return moat, management, margin_safety, meaning, total
+
+
+# =========================
+# Sentiment
+# =========================
+def sentiment(future_pe, forward_pe):
+    if not forward_pe:
+        return "No Data"
+
+    ratio = forward_pe / future_pe
+
+    if ratio > 1.2:
+        return "Overvalued"
+    elif ratio < 0.8:
+        return "Undervalued"
+    return "Fair"
+
+
+# =========================
+# Analyze Single Stock
+# =========================
+def analyze(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+
+        eps = get_eps(stock)
+        growth = estimate_growth(stock)
+        roic = get_roic(stock)
+
+        if not eps or not growth or roic is None:
+            return None
+
+        pe = get_pe(stock, growth)
+        forward_pe = get_forward_pe(stock)
+
+        sticker, mos = rule1(eps, growth, pe)
+
+        price = stock.history(period="1d")["Close"].iloc[-1]
+
+        upside = (sticker / price - 1) * 100
+
+        moat, management, mos_score, meaning, score = score_4m(
+            growth, roic, upside
+        )
+
+        if price < mos:
+            decision = "STRONG BUY"
+        elif price < sticker:
+            decision = "BUY"
+        else:
+            decision = "WAIT"
 
         return {
             "Ticker": ticker,
             "Price": round(price,2),
-            "Sticker": round(stick,2),
-            "MOS": round(mos,2),
-            "AI": ai_signal
+            "EPS": round(eps,2),
+            "Growth%": round(growth*100,1),
+            "ROIC%": round(roic*100,1),
+            "Future PE": round(pe,1),
+            "Forward PE": round(forward_pe,1) if forward_pe else None,
+            "Sentiment": sentiment(pe, forward_pe),
+            "Sticker": round(sticker,1),
+            "MOS": round(mos,1),
+            "Upside%": round(upside,1),
+            "Moat": round(moat,1),
+            "Management": round(management,1),
+            "MOS Score": round(mos_score,1),
+            "Meaning": meaning,
+            "Score": round(score,1),
+            "Decision": decision
         }
 
     except:
