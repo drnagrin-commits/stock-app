@@ -1,5 +1,5 @@
 import yfinance as yf
-from ai_module import predict_price, ai_decision
+from ai_module import predict_growth, predict_price, ai_decision
 
 DISCOUNT_RATE = 0.15
 MOS_MARGIN = 0.5
@@ -9,22 +9,18 @@ def sticker(eps, growth, pe):
     future_price = future_eps * pe
     return future_price / ((1+DISCOUNT_RATE)**10)
 
-
-
-
-
 def analyze(ticker):
     s = yf.Ticker(ticker)
-   
+
     try:
         price = s.info["currentPrice"]
         eps = s.info["trailingEps"]
         pe = s.info.get("trailingPE", 20)
-        rev = s.info["Total Revenue"]
-        rev = rev[::-1] # oldest → newest
-        growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
+
         earnings = s.earnings
         eps_history = earnings["Earnings"].values if earnings is not None else [eps]
+
+        growth = predict_growth(eps_history)
 
         hist = s.history(period="1y")
         predicted_price = predict_price(hist["Close"].values)
@@ -44,7 +40,3 @@ def analyze(ticker):
 
     except:
         return None
-
-
-
-
