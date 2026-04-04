@@ -13,7 +13,7 @@ YEARS = 10
 def estimate_growth(stock):
     
     try:
-        rev = stock.financials.loc["year growth-5"][::-1]
+        rev = stock.info.get["year growth-5"][::-1]
         if len(rev) >= 3:
             growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
             return (growth)
