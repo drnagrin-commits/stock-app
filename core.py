@@ -12,7 +12,7 @@ def sticker(eps, growth, pe):
 
 def growth(stock):
     try:
-        rev = stock.financials.loc["Total Revenue"]
+        rev = s.info["Total Revenue"]
         rev = rev[::-1] # oldest → newest
         if len(rev) >= 4:
             Egrowth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
