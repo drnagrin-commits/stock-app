@@ -103,7 +103,7 @@ def analyze(ticker):
 
         sticker, mos = rule1(eps, growth, pe)
 
-        price = stock.history(period="1d")["Close"].iloc[-1]
+        price = stock.fast_info.get("lastPrice", None)
 
         upside = (sticker / price - 1) * 100
 
