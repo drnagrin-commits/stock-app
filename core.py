@@ -1,151 +1,89 @@
+# -*- coding: utf-8 -*-
+"""
+Stock Financial Overview - Streamlit GUI
+המשתמש מזין מניות, לוחץ על כפתור, ומקבל טבלה עם:
+צמיחת הכנסות 5 השנים האחרונות, CAGR, P/E, EPS, PEG, מחיר נוכחי ותחזית אנליסטים.
+"""
+
+import streamlit as st
 import yfinance as yf
-import numpy as np
+import pandas as pd
 
-DISCOUNT_RATE = 0.15
-MOS_FACTOR = 0.5
-YEARS = 10
+# -----------------------------
+# פונקציות חישוב
+# -----------------------------
+def calculate_yearly_growth(revenue_series):
+    revenue_series = revenue_series.dropna()
+    revenue_series = revenue_series.head(5)  # רק 5 השנים האחרונות
+    growth = revenue_series.pct_change() * 100
+    return growth[1:]  # שנה ראשונה אין עליה
 
-
-# =========================
-# Growth (Revenue based)
-# =========================
-
-def estimate_growth(stock):
-    
-    try:
-        rev = stock.info.get["year growth-5"][::-1]
-        if len(rev) >= 3:
-            growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
-            return (growth)
-    except:
-        pass
-
-    #
-        try:
-            eps_hist = stock.info.get("earningsQuarterlyGrowth")
-            if eps_hist:
-                return (eps_his)
-        except:
-            pass
-
-    # fallback
-    return 0.10
-# =========================
-# Data Extractors
-# =========================
-def get_eps(stock):
-    return stock.info.get("trailingEps")
-
-
-def get_roic(stock):
-    return stock.info.get("returnOnCapital")
-
-
-def get_pe(stock, growth):
-    # Rule #1 Future PE
-    return min(growth * 100 * 2, 25)
-
-
-def get_forward_pe(stock):
-    return stock.info.get("forwardPE")
-
-
-# =========================
-# Valuation
-# =========================
-def rule1(eps, growth, pe):
-    future_eps = eps * ((1 + growth) ** YEARS)
-    future_price = future_eps * pe
-    sticker = future_price / ((1 + DISCOUNT_RATE) ** YEARS)
-    mos = sticker * MOS_FACTOR
-    return sticker, mos
-
-
-# =========================
-# 4M Scoring
-# =========================
-def score_4m(growth, roic, upside):
-    moat = min(growth * 100, 25)
-    management = min(roic * 100 if roic else 0, 25)
-    margin_safety = min(max(upside, 0), 25)
-    meaning = 20  # placeholder קבוע
-
-    total = moat + management + margin_safety + meaning
-
-    return moat, management, margin_safety, meaning, total
-
-
-# =========================
-# Sentiment
-# =========================
-def sentiment(future_pe, forward_pe):
-    if not forward_pe:
-        return "No Data"
-
-    ratio = forward_pe / future_pe
-
-    if ratio > 1.2:
-        return "Overvalued"
-    elif ratio < 0.8:
-        return "Undervalued"
-    return "Fair"
-
-
-# =========================
-# Analyze Single Stock
-# =========================
-def analyze(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-
-        eps = get_eps(stock)
-        growth = estimate_growth(stock)
-        roic = get_roic(stock)
-
-        if not eps or not growth or roic is None:
-            return None
-
-        pe = get_pe(stock, growth)
-        forward_pe = get_forward_pe(stock)
-
-        sticker, mos = rule1(eps, growth, pe)
-
-        price = stock.fast_info.get("lastPrice", None)
-        if price is None or eps is None:
-    continue
-
-        upside = (sticker / price - 1) * 100
-
-        moat, management, mos_score, meaning, score = score_4m(
-            growth, roic, upside
-        )
-
-        if price < mos:
-            decision = "STRONG BUY"
-        elif price < sticker:
-            decision = "BUY"
-        else:
-            decision = "WAIT"
-
-        return {
-            "Ticker": ticker,
-            "Price": round(price,2),
-            "EPS": round(eps,2),
-            "Growth%": round(growth*100,1),
-            "ROIC%": round(roic*100,1),
-            "Future PE": round(pe,1),
-            "Forward PE": round(forward_pe,1) if forward_pe else None,
-            "Sentiment": sentiment(pe, forward_pe),
-            "Sticker": round(sticker,1),
-            "MOS": round(mos,1),
-            "Upside%": round(upside,1),
-            "Moat": round(moat,1),
-            "Management": round(management,1),
-            "MOS Score": round(mos_score,1),
-            "Meaning": meaning,
-            "Score": round(score,1),
-            "Decision": decision
-        }
-
-    except:
+def calculate_cagr(revenue_series):
+    revenue_series = revenue_series.dropna().head(5)
+    if len(revenue_series) < 2:
         return None
+    start_value = revenue_series.iloc[-1]
+    end_value = revenue_series.iloc[0]
+    n_years = len(revenue_series) - 1
+    cagr = (end_value / start_value) ** (1/n_years) - 1
+    return cagr * 100
+
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.title("📊 Stock Financial Overview")
+st.write("הכנס רשימת מניות מופרדות בפסיק (למשל: AAPL, MSFT, TSLA)")
+
+user_input = st.text_input("רשימת מניות:", "AAPL, MSFT, TSLA")
+
+if st.button("הצג טבלה"):
+    stocks = [s.strip().upper() for s in user_input.split(",") if s.strip()]
+
+    if not stocks:
+        st.warning("לא הוזנה רשימת מניות תקינה.")
+    else:
+        results = []
+
+        for stock in stocks:
+            try:
+                ticker = yf.Ticker(stock)
+                earnings = ticker.financials.T
+                info = ticker.info
+
+                # צמיחת הכנסות
+                if 'Total Revenue' in earnings.columns:
+                    revenue = earnings['Total Revenue']
+                    yearly_growth = calculate_yearly_growth(revenue)
+                    cagr = calculate_cagr(revenue)
+                else:
+                    yearly_growth = []
+                    cagr = None
+
+                analyst_target = info.get("targetMeanPrice", "N/A")
+                current_price = info.get("currentPrice", "N/A")
+
+                result = {
+                    "symbol": stock,
+                    "Current_Price": current_price,
+                    "Analyst_Target": analyst_target,
+                    "CAGR_Total_Revenue": f"{cagr:.2f}%" if cagr is not None else "N/A",
+                    "Trailing_PE": info.get("trailingPE", "N/A"),
+                    "Forward_PE": info.get("forwardPE", "N/A"),
+                    "EPS": info.get("trailingEps", "N/A"),
+                    "PEG_Ratio": info.get("pegRatio", "N/A")
+                }
+
+                for i, val in enumerate(yearly_growth, 1):
+                    result[f"Year_{i}_Growth"] = f"{val:.2f}%"
+
+                results.append(result)
+
+            except Exception as e:
+                st.error(f"לא הצלחנו לקבל נתונים עבור {stock}: {e}")
+
+        if results:
+            df_results = pd.DataFrame(results)
+            st.write("### טבלת נתונים פיננסיים")
+            st.dataframe(df_results)
+        else:
+            st.warning("לא התקבלו נתונים למניות שהוזנו.")
