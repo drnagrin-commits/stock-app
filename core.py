@@ -16,7 +16,7 @@ def growth(stock):
         rev = rev[::-1] # oldest → newest
         if len(rev) >= 4:
             Egrowth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
-            return min(max(Egrowth, 0.05), 0.25) # clamp 5%-25%
+            return min(max(Egrowth, 0.05), 1.25) # clamp 5%-25%
     except:
         pass
     return 0.10 # fallback
