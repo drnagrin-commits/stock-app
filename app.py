@@ -6,22 +6,20 @@ import numpy as np
 DISCOUNT_RATE = 0.15
 MOS_MARGIN = 0.5
 
+# NASDAQ 100 (ברירת מחדל)
 DEFAULT_TICKERS = [
-    "AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA",
+    "AAPL","MSFT","NVDA","AMZN","META","GOOGL","GOOG","TSLA",
     "AVGO","COST","PEP","ADBE","CSCO","NFLX","AMD","INTC",
-    "TXN","QCOM","AMGN","INTU","ISRG","AMAT","BKNG",
-    "ADI","LRCX","MU","PANW","SNPS","CDNS","KLAC"
+    "CMCSA","TXN","QCOM","AMGN","HON","INTU","ISRG","AMAT",
+    "BKNG","ADI","MDLZ","LRCX","MU","GILD","PANW","SNPS",
+    "CDNS","KLAC","VRTX","REGN","ADP","MAR","MNST","FTNT"
 ]
 
-# =========================
-# EPS Growth
-# =========================
 def get_growth(stock):
     try:
         earnings = stock.earnings
-
         if earnings is None or len(earnings) < 3:
-            return None
+            return 0.1
 
         eps = earnings["Earnings"].values
         growth_rates = []
@@ -30,46 +28,18 @@ def get_growth(stock):
             if eps[i-1] > 0:
                 growth_rates.append((eps[i]/eps[i-1]) - 1)
 
-        return np.mean(growth_rates) if growth_rates else None
-
+        return np.mean(growth_rates) if growth_rates else 0.1
     except:
-        return None
+        return 0.1
 
 
-# =========================
-# Sticker + Future PE
-# =========================
-def calculate_sticker(eps, growth):
+def calculate_sticker(eps, growth, pe):
     future_eps = eps * ((1 + growth) ** 10)
-
-    future_pe = min(growth * 100 * 2, 25)
-
-    future_price = future_eps * future_pe
+    future_price = future_eps * pe
     sticker = future_price / ((1 + DISCOUNT_RATE) ** 10)
-
-    return sticker, future_pe
-
-
-# =========================
-# Market Sentiment
-# =========================
-def get_sentiment(future_pe, forward_pe):
-    if not forward_pe:
-        return "No Data"
-
-    ratio = forward_pe / future_pe
-
-    if ratio > 1.2:
-        return "🔴 Overvalued"
-    elif ratio < 0.8:
-        return "🟢 Undervalued"
-    else:
-        return "🟡 Fair"
+    return sticker
 
 
-# =========================
-# Analyze Stock
-# =========================
 def analyze(ticker):
     try:
         stock = yf.Ticker(ticker)
@@ -77,25 +47,22 @@ def analyze(ticker):
 
         price = info.get("currentPrice")
         eps = info.get("trailingEps")
-        roic = info.get("returnOnCapital")
-        forward_pe = info.get("forwardPE")
+        pe = info.get("trailingPE", 20)
+        roic = info.get("returnOnCapital", None)
+
+        if not price or not eps:
+            return None
 
         growth = get_growth(stock)
 
-        if not price or not eps or not growth or roic is None:
-            return None
-
-        sticker, future_pe = calculate_sticker(eps, growth)
+        sticker = calculate_sticker(eps, growth, pe)
         mos = sticker * MOS_MARGIN
         upside = (sticker - price) / price * 100
 
-        score = (
-            growth * 100 * 0.4 +
-            roic * 100 * 0.3 +
-            upside * 0.3
-        )
+        # Score פשוט
+        score = (growth * 100) * 0.4 + (roic or 0) * 100 * 0.3 + upside * 0.3
 
-        # Decision Rule #1
+        # Decision לפי Rule #1 בלבד
         if price < mos:
             decision = "🔥 STRONG BUY"
         elif price < sticker:
@@ -103,17 +70,12 @@ def analyze(ticker):
         else:
             decision = "🟡 WAIT"
 
-        sentiment = get_sentiment(future_pe, forward_pe)
-
         return {
             "Ticker": ticker,
             "Price": round(price,2),
             "EPS": round(eps,2),
             "%Growth": round(growth*100,1),
-            "ROIC%": round(roic*100,1),
-            "Future PE": round(future_pe,1),
-            "Forward PE": round(forward_pe,1) if forward_pe else None,
-            "Market Sentiment": sentiment,
+            "ROIC%": round((roic or 0)*100,1),
             "Sticker": round(sticker,2),
             "MOS": round(mos,2),
             "Upside%": round(upside,1),
@@ -125,10 +87,8 @@ def analyze(ticker):
         return None
 
 
-# =========================
 # UI
-# =========================
-st.title("📊 Rule #1 Screener PRO")
+st.title("📊 Rule #1 Screener (Yahoo Data Only)")
 
 tickers_input = st.text_input(
     "Enter Tickers (comma separated)",
@@ -150,4 +110,4 @@ if not df.empty:
     df = df.sort_values(by="Score", ascending=False)
     st.dataframe(df)
 else:
-    st.write("No valid data (missing EPS / Growth / ROIC)")
+    st.write("No data available")
