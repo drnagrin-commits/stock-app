@@ -11,20 +11,20 @@ YEARS = 10
 # =========================
 
 def estimate_growth(stock):
-    # ניסיון 1: Revenue
+    
     try:
         rev = stock.financials.loc["Total Revenue"][::-1]
         if len(rev) >= 3:
             growth = (rev.iloc[-1] / rev.iloc[0]) ** (1/(len(rev)-1)) - 1
-            return min(max(growth, 0.05), 0.25)
+            return (growth)
     except:
         pass
 
-    # ניסיון 2: EPS growth
+    #
         try:
             eps_hist = stock.info.get("earningsQuarterlyGrowth")
             if eps_hist:
-                return min(max(eps_hist, 0.05), 0.25)
+                return (eps_his)
         except:
             pass
 
