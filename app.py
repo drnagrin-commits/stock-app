@@ -153,7 +153,13 @@ if st.button("🚀 הרץ"):
 
             # 🔥 SCORE
             score = calculate_score(cagr, peg, upside, price, buy)
+
+            # הורדת ציון למניות יקרות
+            if decision == "EXPENSIVE 🔴":
+                score = score / 2
+
             analyst_target = info.get("targetMeanPrice")
+
             results.append({
                 "Symbol": stock,
                 "Price": price,
@@ -174,12 +180,21 @@ if st.button("🚀 הרץ"):
 
     df = pd.DataFrame(results)
 
+    # -----------------------------
+    # ✅ סינון CAGR חיובי בלבד
+    # -----------------------------
+    df = df[df["CAGR_%"].notna()]
+    df = df[df["CAGR_%"] > 0]
+
     # 🔥 מיון לפי ציון
     df = df.sort_values(by="Score", ascending=False)
 
     st.subheader("📊 דירוג מניות")
     st.dataframe(df)
 
-    # Top 10
-    st.subheader("🏆 Top 10")
-    st.dataframe(df.head(10))
+    # -----------------------------
+    # ✅ Top 10 רק BUY / WATCH
+    # -----------------------------
+    st.subheader("🏆 Top 10 (רק BUY / WATCH)")
+    top10 = df[df["Decision"].isin(["BUY 🟢", "WATCH 🟡"])]
+    st.dataframe(top10.head(10))
