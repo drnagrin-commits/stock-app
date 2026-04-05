@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND
+Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (Stable)
 """
 
 import streamlit as st
@@ -47,10 +47,7 @@ def calculate_trend(revenue_series):
         last_year = growth_series.iloc[-1]
         avg_previous = growth_series.iloc[:-1].mean()
 
-        if last_year > avg_previous:
-            return "⬆️"
-        else:
-            return "⬇️"
+        return "⬆️" if last_year > avg_previous else "⬇️"
     except:
         return None
 
@@ -77,9 +74,6 @@ def get_decision(price, buy, sticker):
     else:
         return "EXPENSIVE 🔴"
 
-# -----------------------------
-# 🔥 SCORING FUNCTION
-# -----------------------------
 def calculate_score(cagr, peg, upside, price, buy):
     score = 0
 
@@ -140,17 +134,17 @@ if st.button("🚀 הרץ"):
                 cagr = calculate_cagr(revenue)
                 trend = calculate_trend(revenue)
             else:
-                cagr = None
-                trend = None
+                continue  # אין נתונים → דלג
+
+            if cagr is None or cagr <= 0:
+                continue  # סינון מוקדם כבר בלולאה
 
             price = info.get("currentPrice")
             target = info.get("targetMeanPrice")
             forward_pe = info.get("forwardPE")
             eps = info.get("trailingEps")
 
-            upside = None
-            if price and target:
-                upside = ((target / price) - 1) * 100
+            upside = ((target / price) - 1) * 100 if price and target else None
 
             peg = info.get("pegRatio")
             if peg is None and cagr and forward_pe:
@@ -170,7 +164,7 @@ if st.button("🚀 הרץ"):
                 "Analyst_Target": target if target else "N/A",
                 "Trailing_PE": round(info.get("trailingPE"), 2) if isinstance(info.get("trailingPE"), (int, float)) else None,
                 "Forward_PE": round(forward_pe, 2) if isinstance(forward_pe, (int, float)) else None,
-                "CAGR_%": round(cagr,1) if cagr else None,
+                "CAGR_%": round(cagr,1),
                 "Trend": trend,
                 "PEG": round(peg,2) if peg else None,
                 "Upside_%": round(upside,1) if upside else None,
@@ -185,15 +179,35 @@ if st.button("🚀 הרץ"):
 
     df = pd.DataFrame(results)
 
-    # סינון CAGR חיובי בלבד
-    df = df[df["CAGR_%"].notna()]
-    df = df[df["CAGR_%"] > 0]
+    # -----------------------------
+    # 🛡️ הגנות קריסה
+    # -----------------------------
+    if df.empty:
+        st.warning("לא נמצאו מניות מתאימות (ייתכן שכל הנתונים נפסלו)")
+        st.stop()
 
+    if "CAGR_%" not in df.columns:
+        st.warning("בעיה בנתוני CAGR")
+        st.stop()
+
+    # -----------------------------
+    # מיון
+    # -----------------------------
     df = df.sort_values(by="Score", ascending=False)
 
     st.subheader("📊 דירוג מניות")
     st.dataframe(df)
 
+    # -----------------------------
+    # Top 10 רק BUY / WATCH
+    # -----------------------------
     st.subheader("🏆 Top 10 (רק BUY / WATCH)")
     top10 = df[df["Decision"].isin(["BUY 🟢", "WATCH 🟡"])]
-    st.dataframe(top10.head(10))
+
+    if top10.empty:
+        st.info("אין מניות BUY/WATCH כרגע")
+    else:
+        st.dataframe(top10.head(10))
+
+    # Debug קטן
+    st.caption(f"סה״כ מניות שנותחו: {len(df)}")
