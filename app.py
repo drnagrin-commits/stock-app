@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Stock Analyzer + Rule #1 + NASDAQ100 + S&P500 + SCORE + TREND (No Web Dependency)
+Stock Analyzer + Rule #1 + NASDAQ100 + S&P500 + SCORE + TREND
 """
 
 import streamlit as st
@@ -8,29 +8,29 @@ import yfinance as yf
 import pandas as pd
 
 # -----------------------------
-# NASDAQ 100 (מקוצר לדוגמה)
+# NASDAQ 100
 # -----------------------------
 NASDAQ_100 = [
-    "AAPL","MSFT","AMZN","NVDA","GOOGL","META","TSLA","AVGO","PEP"
+    "AAPL","MSFT","AMZN","NVDA","GOOGL","GOOG","META","TSLA","AVGO","PEP"
 ]
 
 # -----------------------------
-# S&P 500 (סטטי - חלקי ליציבות, ניתן להרחיב)
+# S&P 500 (נשלף אוטומטית)
 # -----------------------------
-SP500 = [
-    "AAPL","MSFT","AMZN","NVDA","GOOGL","META","BRK.B","UNH","XOM","JNJ",
-    "JPM","V","PG","MA","HD","CVX","ABBV","MRK","COST","PEP",
-    "KO","LLY","ADBE","AVGO","WMT","BAC","CRM","ACN","MCD","CSCO",
-    "DHR","LIN","TXN","NEE","NFLX","AMD","INTC","PM","ORCL","ABT",
-    "QCOM","TMO","HON","UNP","IBM","INTU","CAT","GE","LOW","SPGI",
-    "GS","NOW","AMGN","ISRG","BKNG","PLD","BLK","MDT","SYK","ADI"
-]
+@st.cache_data
+def get_sp500():
+    table = pd.read_html("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
+    df = table[0]
+    return df["Symbol"].tolist()
 
 # -----------------------------
 # פונקציות
 # -----------------------------
 def prepare_revenue_series(revenue_series):
-    return revenue_series.dropna().head(5)[::-1]
+    revenue_series = revenue_series.dropna()
+    revenue_series = revenue_series.sort_index()  # 🔥 תיקון קריטי
+    revenue_series = revenue_series.tail(5)
+    return revenue_series
 
 def calculate_yearly_growth(revenue_series):
     return (revenue_series.pct_change() * 100)[1:]
@@ -45,9 +45,21 @@ def calculate_cagr(revenue_series):
 def calculate_trend(revenue_series):
     try:
         growth = calculate_yearly_growth(revenue_series)
+
         if len(growth) < 2:
             return None
-        return "⬆️" if growth.iloc[-1] > growth.iloc[:-1].mean() else "⬇️"
+
+        last_year = growth.iloc[-1]
+        prev_avg = growth.iloc[:-1].mean()
+
+        # 🔥 תיקון לוגיקה + מניעת רעש
+        if last_year > prev_avg * 1.05:
+            return "⬆️"
+        elif last_year < prev_avg * 0.95:
+            return "⬇️"
+        else:
+            return "➡️"
+
     except:
         return None
 
@@ -111,7 +123,10 @@ def calculate_score(cagr, peg, upside, price, buy):
 # -----------------------------
 st.title("📊 Stock Analyzer PRO")
 
-ALL_STOCKS = list(set(NASDAQ_100 + SP500))
+# שילוב רשימות
+sp500 = get_sp500()
+ALL_STOCKS = list(set(NASDAQ_100 + sp500))
+
 user_input = st.text_area("מניות:", ",".join(ALL_STOCKS), height=150)
 
 if st.button("🚀 הרץ"):
