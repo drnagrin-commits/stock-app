@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (Stable)
+Stock Analyzer + Rule #1 + NASDAQ100 + S&P500 + SCORE + TREND (No Web Dependency)
 """
 
 import streamlit as st
@@ -8,30 +8,34 @@ import yfinance as yf
 import pandas as pd
 
 # -----------------------------
-# NASDAQ 100
+# NASDAQ 100 (מקוצר לדוגמה)
 # -----------------------------
 NASDAQ_100 = [
-    "AAPL","MSFT","AMZN","NVDA","GOOGL","GOOG","META","TSLA","AVGO","PEP",
-    "COST","CSCO","ADBE","NFLX","CMCSA","INTC","AMD","TXN","QCOM","AMGN",
-    "HON","INTU","AMAT","ISRG","BKNG","ADI","MDLZ","GILD","LRCX","MU",
-    "REGN","VRTX","FISV","CSX","ADP","ATVI","SNPS","PYPL","CDNS","KLAC",
-    "MAR","MELI","ORLY","FTNT","ABNB","WDAY","KDP","NXPI","MRVL","CHTR",
-    "MNST","AEP","EXC","LULU","ROST","ODFL","DXCM","PAYX","XEL","CTAS",
-    "FAST","SIRI","EA","IDXX","BIIB","VRSK","ILMN","TEAM","EBAY","WBA",
-    "ANSS","CPRT","ZM","PDD","LCID","RIVN","ZS","CRWD","DDOG","OKTA",
-    "PANW","DOCU","MTCH","SPLK","ALGN","SGEN","VRSN","CDW","PCAR","DLTR",
-    "TTWO","UAL","KHC","GEHC","FANG","MCHP","ON","ASML"
+    "AAPL","MSFT","AMZN","NVDA","GOOGL","META","TSLA","AVGO","PEP"
+]
+
+# -----------------------------
+# S&P 500 (סטטי - חלקי ליציבות, ניתן להרחיב)
+# -----------------------------
+SP500 = [
+    "AAPL","MSFT","AMZN","NVDA","GOOGL","META","BRK.B","UNH","XOM","JNJ",
+    "JPM","V","PG","MA","HD","CVX","ABBV","MRK","COST","PEP",
+    "KO","LLY","ADBE","AVGO","WMT","BAC","CRM","ACN","MCD","CSCO",
+    "DHR","LIN","TXN","NEE","NFLX","AMD","INTC","PM","ORCL","ABT",
+    "QCOM","TMO","HON","UNP","IBM","INTU","CAT","GE","LOW","SPGI",
+    "GS","NOW","AMGN","ISRG","BKNG","PLD","BLK","MDT","SYK","ADI"
 ]
 
 # -----------------------------
 # פונקציות
 # -----------------------------
+def prepare_revenue_series(revenue_series):
+    return revenue_series.dropna().head(5)[::-1]
+
 def calculate_yearly_growth(revenue_series):
-    revenue_series = revenue_series.dropna().head(5)[::-1]
     return (revenue_series.pct_change() * 100)[1:]
 
 def calculate_cagr(revenue_series):
-    revenue_series = revenue_series.dropna().head(5)[::-1]
     if len(revenue_series) < 2:
         return None
     start, end = revenue_series.iloc[0], revenue_series.iloc[-1]
@@ -40,16 +44,18 @@ def calculate_cagr(revenue_series):
 
 def calculate_trend(revenue_series):
     try:
-        growth_series = calculate_yearly_growth(revenue_series)
-        if len(growth_series) < 2:
+        growth = calculate_yearly_growth(revenue_series)
+        if len(growth) < 2:
             return None
-
-        last_year = growth_series.iloc[-1]
-        avg_previous = growth_series.iloc[:-1].mean()
-
-        return "⬆️" if last_year > avg_previous else "⬇️"
+        return "⬆️" if growth.iloc[-1] > growth.iloc[:-1].mean() else "⬇️"
     except:
         return None
+
+def calculate_revenue_metrics(revenue_series):
+    try:
+        return revenue_series.mean(), revenue_series.iloc[-1]
+    except:
+        return None, None
 
 def calculate_rule1_price(eps, growth_rate, future_pe=15):
     try:
@@ -78,46 +84,35 @@ def calculate_score(cagr, peg, upside, price, buy):
     score = 0
 
     if cagr:
-        if cagr > 15:
-            score += 30
-        elif cagr > 10:
-            score += 20
-        elif cagr > 5:
-            score += 10
+        if cagr > 15: score += 30
+        elif cagr > 10: score += 20
+        elif cagr > 5: score += 10
 
     if peg:
-        if peg < 1:
-            score += 25
-        elif peg < 2:
-            score += 15
-        elif peg < 3:
-            score += 5
+        if peg < 1: score += 25
+        elif peg < 2: score += 15
+        elif peg < 3: score += 5
 
     if upside:
-        if upside > 30:
-            score += 20
-        elif upside > 15:
-            score += 10
-        elif upside > 5:
-            score += 5
+        if upside > 30: score += 20
+        elif upside > 15: score += 10
+        elif upside > 5: score += 5
 
     if price and buy:
         mos = (buy - price) / buy * 100
-        if mos > 30:
-            score += 25
-        elif mos > 15:
-            score += 15
-        elif mos > 0:
-            score += 5
+        if mos > 30: score += 25
+        elif mos > 15: score += 15
+        elif mos > 0: score += 5
 
     return score
 
 # -----------------------------
 # UI
 # -----------------------------
-st.title("📊 NASDAQ 100 Analyzer + SCORE + TREND")
+st.title("📊 Stock Analyzer PRO")
 
-user_input = st.text_area("מניות:", ",".join(NASDAQ_100), height=150)
+ALL_STOCKS = list(set(NASDAQ_100 + SP500))
+user_input = st.text_area("מניות:", ",".join(ALL_STOCKS), height=150)
 
 if st.button("🚀 הרץ"):
     stocks = [s.strip().upper() for s in user_input.split(",") if s.strip()]
@@ -129,15 +124,20 @@ if st.button("🚀 הרץ"):
             earnings = ticker.financials.T
             info = ticker.info
 
-            if 'Total Revenue' in earnings.columns:
-                revenue = earnings['Total Revenue']
-                cagr = calculate_cagr(revenue)
-                trend = calculate_trend(revenue)
-            else:
-                continue  # אין נתונים → דלג
+            if 'Total Revenue' not in earnings.columns:
+                continue
 
+            revenue = prepare_revenue_series(earnings['Total Revenue'])
+
+            if len(revenue) < 2:
+                continue
+
+            cagr = calculate_cagr(revenue)
             if cagr is None or cagr <= 0:
-                continue  # סינון מוקדם כבר בלולאה
+                continue
+
+            trend = calculate_trend(revenue)
+            revenue_avg, revenue_last = calculate_revenue_metrics(revenue)
 
             price = info.get("currentPrice")
             target = info.get("targetMeanPrice")
@@ -154,16 +154,14 @@ if st.button("🚀 הרץ"):
             decision = get_decision(price, buy, sticker)
 
             score = calculate_score(cagr, peg, upside, price, buy)
-
             if decision == "EXPENSIVE 🔴":
                 score = score / 2
 
             results.append({
                 "Symbol": stock,
                 "Price": price,
-                "Analyst_Target": target if target else "N/A",
-                "Trailing_PE": round(info.get("trailingPE"), 2) if isinstance(info.get("trailingPE"), (int, float)) else None,
-                "Forward_PE": round(forward_pe, 2) if isinstance(forward_pe, (int, float)) else None,
+                "Revenue_Avg": round(revenue_avg, 0) if revenue_avg else None,
+                "Revenue_Last": round(revenue_last, 0) if revenue_last else None,
                 "CAGR_%": round(cagr,1),
                 "Trend": trend,
                 "PEG": round(peg,2) if peg else None,
@@ -179,35 +177,21 @@ if st.button("🚀 הרץ"):
 
     df = pd.DataFrame(results)
 
-    # -----------------------------
-    # 🛡️ הגנות קריסה
-    # -----------------------------
     if df.empty:
-        st.warning("לא נמצאו מניות מתאימות (ייתכן שכל הנתונים נפסלו)")
+        st.warning("לא נמצאו מניות מתאימות")
         st.stop()
 
-    if "CAGR_%" not in df.columns:
-        st.warning("בעיה בנתוני CAGR")
-        st.stop()
-
-    # -----------------------------
-    # מיון
-    # -----------------------------
     df = df.sort_values(by="Score", ascending=False)
 
     st.subheader("📊 דירוג מניות")
     st.dataframe(df)
 
-    # -----------------------------
-    # Top 10 רק BUY / WATCH
-    # -----------------------------
-    st.subheader("🏆 Top 10 (רק BUY / WATCH)")
+    st.subheader("🏆 Top 10 (BUY / WATCH)")
     top10 = df[df["Decision"].isin(["BUY 🟢", "WATCH 🟡"])]
 
     if top10.empty:
-        st.info("אין מניות BUY/WATCH כרגע")
+        st.info("אין מניות מתאימות כרגע")
     else:
         st.dataframe(top10.head(10))
 
-    # Debug קטן
-    st.caption(f"סה״כ מניות שנותחו: {len(df)}")
+    st.caption(f"סה״כ מניות: {len(df)}")
