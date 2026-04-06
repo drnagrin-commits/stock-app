@@ -1,8 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Stock Analyzer + Rule #1 + NASDAQ100 + SCORE
-"""
-
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -15,21 +11,12 @@ NASDAQ_100 = [
     "COST","CSCO","ADBE","NFLX","CMCSA","INTC","AMD","TXN","QCOM","AMGN",
     "HON","INTU","AMAT","ISRG","BKNG","ADI","MDLZ","GILD","LRCX","MU",
     "REGN","VRTX","FISV","CSX","ADP","ATVI","SNPS","PYPL","CDNS","KLAC",
-    "MAR","MELI","ORLY","FTNT","ABNB","WDAY","KDP","NXPI","MRVL","CHTR",
-    "MNST","AEP","EXC","LULU","ROST","ODFL","DXCM","PAYX","XEL","CTAS",
-    "FAST","SIRI","EA","IDXX","BIIB","VRSK","ILMN","TEAM","EBAY","WBA",
-    "ANSS","CPRT","ZM","PDD","LCID","RIVN","ZS","CRWD","DDOG","OKTA",
-    "PANW","DOCU","MTCH","SPLK","ALGN","SGEN","VRSN","CDW","PCAR","DLTR",
-    "TTWO","UAL","KHC","GEHC","FANG","MCHP","ON","ASML"
+    "MAR","MELI","ORLY","FTNT","ABNB","WDAY","KDP","NXPI","MRVL","CHTR"
 ]
 
 # -----------------------------
 # פונקציות
 # -----------------------------
-def calculate_yearly_growth(revenue_series):
-    revenue_series = revenue_series.dropna().head(5)[::-1]
-    return (revenue_series.pct_change() * 100)[1:]
-
 def calculate_cagr(revenue_series):
     revenue_series = revenue_series.dropna().head(5)[::-1]
     if len(revenue_series) < 2:
@@ -61,57 +48,41 @@ def get_decision(price, buy, sticker):
     else:
         return "EXPENSIVE 🔴"
 
-# -----------------------------
-# 🔥 SCORING FUNCTION
-# -----------------------------
 def calculate_score(cagr, peg, upside, price, buy):
     score = 0
 
-    # CAGR (30)
     if cagr:
-        if cagr > 15:
-            score += 30
-        elif cagr > 10:
-            score += 20
-        elif cagr > 5:
-            score += 10
+        if cagr > 15: score += 30
+        elif cagr > 10: score += 20
+        elif cagr > 5: score += 10
 
-    # PEG (25)
     if peg:
-        if peg < 1:
-            score += 25
-        elif peg < 2:
-            score += 15
-        elif peg < 3:
-            score += 5
+        if peg < 1: score += 25
+        elif peg < 2: score += 15
+        elif peg < 3: score += 5
 
-    # Upside (20)
     if upside:
-        if upside > 30:
-            score += 20
-        elif upside > 15:
-            score += 10
-        elif upside > 5:
-            score += 5
+        if upside > 30: score += 20
+        elif upside > 15: score += 10
+        elif upside > 5: score += 5
 
-    # Margin of Safety (25)
     if price and buy:
         mos = (buy - price) / buy * 100
-        if mos > 30:
-            score += 25
-        elif mos > 15:
-            score += 15
-        elif mos > 0:
-            score += 5
+        if mos > 30: score += 25
+        elif mos > 15: score += 15
+        elif mos > 0: score += 5
 
     return score
+
+def clean(val):
+    return round(val, 2) if isinstance(val, (int, float)) else None
 
 # -----------------------------
 # UI
 # -----------------------------
-st.title("📊 NASDAQ 100 Analyzer + SCORE")
+st.title("📊 NASDAQ Analyzer + Rule #1 + Score")
 
-user_input = st.text_area("מניות:", ",".join(NASDAQ_100), height=150)
+user_input = st.text_area("מניות:", ",".join(NASDAQ_100), height=120)
 
 if st.button("🚀 הרץ"):
     stocks = [s.strip().upper() for s in user_input.split(",") if s.strip()]
@@ -120,25 +91,29 @@ if st.button("🚀 הרץ"):
     for stock in stocks:
         try:
             ticker = yf.Ticker(stock)
-            earnings = ticker.financials.T
             info = ticker.info
+            earnings = ticker.financials.T
 
             # Growth
             if 'Total Revenue' in earnings.columns:
-                revenue = earnings['Total Revenue']
-                cagr = calculate_cagr(revenue)
+                cagr = calculate_cagr(earnings['Total Revenue'])
             else:
                 cagr = None
 
+            # נתונים בסיסיים
             price = info.get("currentPrice")
-            target = info.get("targetMeanPrice")
+            trailing_pe = info.get("trailingPE")
             forward_pe = info.get("forwardPE")
             eps = info.get("trailingEps")
 
+            # Analyst target
+            analyst_target = info.get("targetMeanPrice")
+
             # Upside
-            upside = None
-            if price and target:
-                upside = ((target / price) - 1) * 100
+            if isinstance(price, (int, float)) and isinstance(analyst_target, (int, float)):
+                upside = ((analyst_target - price) / price) * 100
+            else:
+                upside = None
 
             # PEG
             peg = info.get("pegRatio")
@@ -151,50 +126,41 @@ if st.button("🚀 הרץ"):
             # Decision
             decision = get_decision(price, buy, sticker)
 
-            # 🔥 SCORE
+            # Score
             score = calculate_score(cagr, peg, upside, price, buy)
-
-            # הורדת ציון למניות יקרות
-            if decision == "EXPENSIVE 🔴":
-                score = score / 2
-
-            analyst_target = info.get("targetMeanPrice")
 
             results.append({
                 "Symbol": stock,
-                "Price": price,
-                "Analyst_Target": analyst_target if analyst_target else "N/A",
-                "Trailing_PE": round(info.get("trailingPE"), 2) if isinstance(info.get("trailingPE"), (int, float)) else None,
-                "Forward_PE": round(forward_pe, 2) if isinstance(forward_pe, (int, float)) else None,
-                "CAGR_%": round(cagr,1) if cagr else None,
-                "PEG": round(peg,2) if peg else None,
-                "Upside_%": round(upside,1) if upside else None,
+                "Price": clean(price),
+                "Trailing_PE": clean(trailing_pe),
+                "Forward_PE": clean(forward_pe),
+                "CAGR_%": clean(cagr),
+                "PEG": clean(peg),
+                "Upside_%": clean(upside),
+                "Analyst_Target": clean(analyst_target),
                 "Sticker": sticker,
                 "Buy": buy,
                 "Decision": decision,
                 "Score": score
             })
 
-        except:
-            continue
+        except Exception as e:
+            st.error(f"שגיאה ב-{stock}: {e}")
 
+    # DataFrame
     df = pd.DataFrame(results)
 
-    # -----------------------------
-    # ✅ סינון CAGR חיובי בלבד
-    # -----------------------------
-    df = df[df["CAGR_%"].notna()]
-    df = df[df["CAGR_%"] > 0]
+    if df.empty:
+        st.warning("לא התקבלו נתונים")
+    else:
+        # סינון בטוח
+        if "CAGR_%" in df.columns:
+            df = df[df["CAGR_%"].notna()]
 
-    # 🔥 מיון לפי ציון
-    df = df.sort_values(by="Score", ascending=False)
+        df = df.sort_values(by="Score", ascending=False)
 
-    st.subheader("📊 דירוג מניות")
-    st.dataframe(df)
+        st.subheader("📊 תוצאות")
+        st.dataframe(df)
 
-    # -----------------------------
-    # ✅ Top 10 רק BUY / WATCH
-    # -----------------------------
-    st.subheader("🏆 Top 10 (רק BUY / WATCH)")
-    top10 = df[df["Decision"].isin(["BUY 🟢", "WATCH 🟡"])]
-    st.dataframe(top10.head(10))
+        st.subheader("🏆 Top 10")
+        st.dataframe(df.head(10))
