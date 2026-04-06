@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (Stable)
+"""
+
 import streamlit as st
 import yfinance as yf
 import pandas as pd
@@ -11,12 +15,21 @@ NASDAQ_100 = [
     "COST","CSCO","ADBE","NFLX","CMCSA","INTC","AMD","TXN","QCOM","AMGN",
     "HON","INTU","AMAT","ISRG","BKNG","ADI","MDLZ","GILD","LRCX","MU",
     "REGN","VRTX","FISV","CSX","ADP","ATVI","SNPS","PYPL","CDNS","KLAC",
-    "MAR","MELI","ORLY","FTNT","ABNB","WDAY","KDP","NXPI","MRVL","CHTR"
+    "MAR","MELI","ORLY","FTNT","ABNB","WDAY","KDP","NXPI","MRVL","CHTR",
+    "MNST","AEP","EXC","LULU","ROST","ODFL","DXCM","PAYX","XEL","CTAS",
+    "FAST","SIRI","EA","IDXX","BIIB","VRSK","ILMN","TEAM","EBAY","WBA",
+    "ANSS","CPRT","ZM","PDD","LCID","RIVN","ZS","CRWD","DDOG","OKTA",
+    "PANW","DOCU","MTCH","SPLK","ALGN","SGEN","VRSN","CDW","PCAR","DLTR",
+    "TTWO","UAL","KHC","GEHC","FANG","MCHP","ON","ASML"
 ]
 
 # -----------------------------
 # פונקציות
 # -----------------------------
+def calculate_yearly_growth(revenue_series):
+    revenue_series = revenue_series.dropna().head(5)[::-1]
+    return (revenue_series.pct_change() * 100)[1:]
+
 def calculate_cagr(revenue_series):
     revenue_series = revenue_series.dropna().head(5)[::-1]
     if len(revenue_series) < 2:
@@ -24,6 +37,19 @@ def calculate_cagr(revenue_series):
     start, end = revenue_series.iloc[0], revenue_series.iloc[-1]
     years = len(revenue_series) - 1
     return ((end / start) ** (1/years) - 1) * 100
+
+def calculate_trend(revenue_series):
+    try:
+        growth_series = calculate_yearly_growth(revenue_series)
+        if len(growth_series) < 2:
+            return None
+
+        last_year = growth_series.iloc[-1]
+        avg_previous = growth_series.iloc[:-1].mean()
+
+        return "⬆️" if last_year > avg_previous else "⬇️"
+    except:
+        return None
 
 def calculate_rule1_price(eps, growth_rate, future_pe=15):
     try:
@@ -52,37 +78,46 @@ def calculate_score(cagr, peg, upside, price, buy):
     score = 0
 
     if cagr:
-        if cagr > 15: score += 30
-        elif cagr > 10: score += 20
-        elif cagr > 5: score += 10
+        if cagr > 15:
+            score += 30
+        elif cagr > 10:
+            score += 20
+        elif cagr > 5:
+            score += 10
 
     if peg:
-        if peg < 1: score += 25
-        elif peg < 2: score += 15
-        elif peg < 3: score += 5
+        if peg < 1:
+            score += 25
+        elif peg < 2:
+            score += 15
+        elif peg < 3:
+            score += 5
 
     if upside:
-        if upside > 30: score += 20
-        elif upside > 15: score += 10
-        elif upside > 5: score += 5
+        if upside > 30:
+            score += 20
+        elif upside > 15:
+            score += 10
+        elif upside > 5:
+            score += 5
 
     if price and buy:
         mos = (buy - price) / buy * 100
-        if mos > 30: score += 25
-        elif mos > 15: score += 15
-        elif mos > 0: score += 5
+        if mos > 30:
+            score += 25
+        elif mos > 15:
+            score += 15
+        elif mos > 0:
+            score += 5
 
     return score
-
-def clean(val):
-    return round(val, 2) if isinstance(val, (int, float)) else None
 
 # -----------------------------
 # UI
 # -----------------------------
-st.title("📊 NASDAQ Analyzer + Rule #1 + Score")
+st.title("📊 NASDAQ 100 Analyzer + SCORE + TREND")
 
-user_input = st.text_area("מניות:", ",".join(NASDAQ_100), height=120)
+user_input = st.text_area("מניות:", ",".join(NASDAQ_100), height=150)
 
 if st.button("🚀 הרץ"):
     stocks = [s.strip().upper() for s in user_input.split(",") if s.strip()]
@@ -91,76 +126,88 @@ if st.button("🚀 הרץ"):
     for stock in stocks:
         try:
             ticker = yf.Ticker(stock)
-            info = ticker.info
             earnings = ticker.financials.T
+            info = ticker.info
 
-            # Growth
             if 'Total Revenue' in earnings.columns:
-                cagr = calculate_cagr(earnings['Total Revenue'])
+                revenue = earnings['Total Revenue']
+                cagr = calculate_cagr(revenue)
+                trend = calculate_trend(revenue)
             else:
-                cagr = None
+                continue  # אין נתונים → דלג
 
-            # נתונים בסיסיים
+            if cagr is None or cagr <= 0:
+                continue  # סינון מוקדם כבר בלולאה
+
             price = info.get("currentPrice")
-            trailing_pe = info.get("trailingPE")
+            target = info.get("targetMeanPrice")
             forward_pe = info.get("forwardPE")
             eps = info.get("trailingEps")
 
-            # Analyst target
-            analyst_target = info.get("targetMeanPrice")
+            upside = ((target / price) - 1) * 100 if price and target else None
 
-            # Upside
-            if isinstance(price, (int, float)) and isinstance(analyst_target, (int, float)):
-                upside = ((analyst_target - price) / price) * 100
-            else:
-                upside = None
-
-            # PEG
             peg = info.get("pegRatio")
             if peg is None and cagr and forward_pe:
                 peg = forward_pe / cagr
 
-            # Rule #1
             sticker, buy = calculate_rule1_price(eps, cagr, forward_pe or 15)
-
-            # Decision
             decision = get_decision(price, buy, sticker)
 
-            # Score
             score = calculate_score(cagr, peg, upside, price, buy)
+
+            if decision == "EXPENSIVE 🔴":
+                score = score / 2
 
             results.append({
                 "Symbol": stock,
-                "Price": clean(price),
-                "Trailing_PE": clean(trailing_pe),
-                "Forward_PE": clean(forward_pe),
-                "CAGR_%": clean(cagr),
-                "PEG": clean(peg),
-                "Upside_%": clean(upside),
-                "Analyst_Target": clean(analyst_target),
+                "Price": price,
+                "Analyst_Target": target if target else "N/A",
+                "Trailing_PE": round(info.get("trailingPE"), 2) if isinstance(info.get("trailingPE"), (int, float)) else None,
+                "Forward_PE": round(forward_pe, 2) if isinstance(forward_pe, (int, float)) else None,
+                "CAGR_%": round(cagr,1),
+                "Trend": trend,
+                "PEG": round(peg,2) if peg else None,
+                "Upside_%": round(upside,1) if upside else None,
                 "Sticker": sticker,
                 "Buy": buy,
                 "Decision": decision,
                 "Score": score
             })
 
-        except Exception as e:
-            st.error(f"שגיאה ב-{stock}: {e}")
+        except:
+            continue
 
-    # DataFrame
     df = pd.DataFrame(results)
 
+    # -----------------------------
+    # 🛡️ הגנות קריסה
+    # -----------------------------
     if df.empty:
-        st.warning("לא התקבלו נתונים")
+        st.warning("לא נמצאו מניות מתאימות (ייתכן שכל הנתונים נפסלו)")
+        st.stop()
+
+    if "CAGR_%" not in df.columns:
+        st.warning("בעיה בנתוני CAGR")
+        st.stop()
+
+    # -----------------------------
+    # מיון
+    # -----------------------------
+    df = df.sort_values(by="Score", ascending=False)
+
+    st.subheader("📊 דירוג מניות")
+    st.dataframe(df)
+
+    # -----------------------------
+    # Top 10 רק BUY / WATCH
+    # -----------------------------
+    st.subheader("🏆 Top 10 (רק BUY / WATCH)")
+    top10 = df[df["Decision"].isin(["BUY 🟢", "WATCH 🟡"])]
+
+    if top10.empty:
+        st.info("אין מניות BUY/WATCH כרגע")
     else:
-        # סינון בטוח
-        if "CAGR_%" in df.columns:
-            df = df[df["CAGR_%"].notna()]
+        st.dataframe(top10.head(10))
 
-        df = df.sort_values(by="Score", ascending=False)
-
-        st.subheader("📊 תוצאות")
-        st.dataframe(df)
-
-        st.subheader("🏆 Top 10")
-        st.dataframe(df.head(10))
+    # Debug קטן
+    st.caption(f"סה״כ מניות שנותחו: {len(df)}")
