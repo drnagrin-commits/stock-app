@@ -1,3 +1,4 @@
+
 # -*- coding: utf-8 -*-
 """
 Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (With %)
@@ -6,7 +7,6 @@ Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (With %)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import requests
 
 # -----------------------------
 # NASDAQ 100
@@ -25,26 +25,11 @@ NASDAQ_100 = [
 ]
 
 # -----------------------------
-# PEG אמיתי מ-Yahoo API
-# -----------------------------
-def get_peg_ratio(symbol):
-    try:
-        url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=defaultKeyStatistics"
-        r = requests.get(url, timeout=5)
-        data = r.json()
-
-        peg = data["quoteSummary"]["result"][0]["defaultKeyStatistics"].get("pegRatio", {}).get("raw", None)
-        return peg
-
-    except:
-        return None
-
-# -----------------------------
 # פונקציות
 # -----------------------------
 def prepare_revenue_series(revenue_series):
     revenue_series = revenue_series.dropna()
-    revenue_series = revenue_series.sort_index()
+    revenue_series = revenue_series.sort_index()  # 🔥 קריטי
     revenue_series = revenue_series.tail(5)
     return revenue_series
 
@@ -73,6 +58,7 @@ def calculate_trend(revenue_series):
         last_year = growth_series.iloc[-1]
         avg_previous = growth_series.iloc[:-1].mean()
 
+        # 🔥 לוגיקה עם סף + הצגת אחוז
         if last_year > avg_previous * 1.05:
             return f"⬆️ {round(last_year,1)}%"
         elif last_year < avg_previous * 0.95:
@@ -179,11 +165,11 @@ if st.button("🚀 הרץ"):
 
             upside = ((target / price) - 1) * 100 if price and target else None
 
-            # 🔥 PEG אמיתי
-            peg = get_peg_ratio(stock)
+            peg = info.get("pegRatio")
+            if peg is None and cagr and forward_pe:
+                peg = forward_pe / cagr
 
             sticker, buy = calculate_rule1_price(eps, cagr, forward_pe or 15)
-
             decision = get_decision(price, buy, sticker)
 
             score = calculate_score(cagr, peg, upside, price, buy)
