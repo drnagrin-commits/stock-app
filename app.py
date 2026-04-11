@@ -6,6 +6,7 @@ Stock Analyzer + Rule #1 + NASDAQ100 + SCORE + TREND (With %)
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import requests
 
 # -----------------------------
 # NASDAQ 100
@@ -22,6 +23,21 @@ NASDAQ_100 = [
     "PANW","DOCU","MTCH","SPLK","ALGN","SGEN","VRSN","CDW","PCAR","DLTR",
     "TTWO","UAL","KHC","GEHC","FANG","MCHP","ON","ASML"
 ]
+
+# -----------------------------
+# PEG אמיתי מ-Yahoo API
+# -----------------------------
+def get_peg_ratio(symbol):
+    try:
+        url = f"https://query1.finance.yahoo.com/v10/finance/quoteSummary/{symbol}?modules=defaultKeyStatistics"
+        r = requests.get(url, timeout=5)
+        data = r.json()
+
+        peg = data["quoteSummary"]["result"][0]["defaultKeyStatistics"].get("pegRatio", {}).get("raw", None)
+        return peg
+
+    except:
+        return None
 
 # -----------------------------
 # פונקציות
@@ -79,15 +95,6 @@ def calculate_rule1_price(eps, growth_rate, future_pe=15):
         return round(sticker, 2), round(buy, 2)
     except:
         return None, None
-
-# 🔥 פונקציה חדשה
-def calculate_growth_from_peg_pe(forward_pe, peg):
-    try:
-        if forward_pe and peg and peg != 0:
-            return forward_pe / peg
-        return None
-    except:
-        return None
 
 def get_decision(price, buy, sticker):
     if price is None or buy is None or sticker is None:
@@ -172,19 +179,10 @@ if st.button("🚀 הרץ"):
 
             upside = ((target / price) - 1) * 100 if price and target else None
 
-            peg = info.get("pegRatio")
-            if peg is None and cagr and forward_pe:
-                peg = forward_pe / cagr
-
-            # 🔥 חדש
-            growth_pe_peg = calculate_growth_from_peg_pe(forward_pe, peg)
+            # 🔥 PEG אמיתי
+            peg = get_peg_ratio(stock)
 
             sticker, buy = calculate_rule1_price(eps, cagr, forward_pe or 15)
-
-            # 🔥 חדש
-            sticker_peg = None
-            if growth_pe_peg and eps:
-                sticker_peg, _ = calculate_rule1_price(eps, growth_pe_peg, forward_pe or 15)
 
             decision = get_decision(price, buy, sticker)
 
@@ -202,10 +200,8 @@ if st.button("🚀 הרץ"):
                 "CAGR_%": round(cagr,1),
                 "Trend": trend,
                 "PEG": round(peg,2) if peg else None,
-                "Growth_PE_PEG_%": round(growth_pe_peg,1) if growth_pe_peg else None,
                 "Upside_%": round(upside,1) if upside else None,
                 "Sticker": sticker,
-                "Sticker_PE_PEG": sticker_peg,
                 "Buy": buy,
                 "Decision": decision,
                 "Score": score
