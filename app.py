@@ -28,7 +28,7 @@ NASDAQ_100 = [
 # -----------------------------
 def prepare_revenue_series(revenue_series):
     revenue_series = revenue_series.dropna()
-    revenue_series = revenue_series.sort_index()  # 🔥 קריטי
+    revenue_series = revenue_series.sort_index()
     revenue_series = revenue_series.tail(5)
     return revenue_series
 
@@ -57,7 +57,6 @@ def calculate_trend(revenue_series):
         last_year = growth_series.iloc[-1]
         avg_previous = growth_series.iloc[:-1].mean()
 
-        # 🔥 לוגיקה עם סף + הצגת אחוז
         if last_year > avg_previous * 1.05:
             return f"⬆️ {round(last_year,1)}%"
         elif last_year < avg_previous * 0.95:
@@ -80,6 +79,15 @@ def calculate_rule1_price(eps, growth_rate, future_pe=15):
         return round(sticker, 2), round(buy, 2)
     except:
         return None, None
+
+# 🔥 פונקציה חדשה
+def calculate_growth_from_peg_pe(forward_pe, peg):
+    try:
+        if forward_pe and peg and peg != 0:
+            return forward_pe / peg
+        return None
+    except:
+        return None
 
 def get_decision(price, buy, sticker):
     if price is None or buy is None or sticker is None:
@@ -168,7 +176,16 @@ if st.button("🚀 הרץ"):
             if peg is None and cagr and forward_pe:
                 peg = forward_pe / cagr
 
+            # 🔥 חדש
+            growth_pe_peg = calculate_growth_from_peg_pe(forward_pe, peg)
+
             sticker, buy = calculate_rule1_price(eps, cagr, forward_pe or 15)
+
+            # 🔥 חדש
+            sticker_peg = None
+            if growth_pe_peg and eps:
+                sticker_peg, _ = calculate_rule1_price(eps, growth_pe_peg, forward_pe or 15)
+
             decision = get_decision(price, buy, sticker)
 
             score = calculate_score(cagr, peg, upside, price, buy)
@@ -185,8 +202,10 @@ if st.button("🚀 הרץ"):
                 "CAGR_%": round(cagr,1),
                 "Trend": trend,
                 "PEG": round(peg,2) if peg else None,
+                "Growth_PE_PEG_%": round(growth_pe_peg,1) if growth_pe_peg else None,
                 "Upside_%": round(upside,1) if upside else None,
                 "Sticker": sticker,
+                "Sticker_PE_PEG": sticker_peg,
                 "Buy": buy,
                 "Decision": decision,
                 "Score": score
